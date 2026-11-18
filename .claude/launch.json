@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "turnos", "runtimeExecutable": "bash", "runtimeArgs": ["iniciar.sh"], "port": 8010 }
+  ]
+}
