@@ -5,39 +5,61 @@
     @push('head')<meta http-equiv="refresh" content="10">@endpush {{-- quien lo mira en el celular ve cuándo lo llaman --}}
 @endif
 
+@php
+    // El ticket muestra solo el número; trámite, cédula y fechas van dentro del QR.
+    $qr = $turno->qr();
+    // Turno sacado para otro día: la fecha va visible (también en papel) para quien no escanee el QR.
+    $diaReservado = $turno->fecha !== $turno->created_at->toDateString()
+        ? \Illuminate\Support\Carbon::parse($turno->fecha)->translatedFormat('l j \d\e F') : null;
+    $lado = count($qr) + 8; // 4 módulos de margen blanco a cada lado, como pide el estándar
+    $trazo = '';
+    foreach ($qr as $y => $fila) {
+        foreach ($fila as $x => $oscuro) {
+            if ($oscuro) {
+                $trazo .= 'M'.($x + 4).' '.($y + 4).'h1v1h-1z';
+            }
+        }
+    }
+@endphp
+
 @section('contenido')
     <div class="tarjeta ticket">
         <p class="suave">GAD Municipal · Catastros y Avalúos</p>
         <p><strong>Su turno</strong></p>
         <div class="codigo">{{ $turno->codigo }}</div>
-        @if ($turno->preferente)<p><span class="etiqueta ok">Atención preferente</span></p>@endif
-        <p><strong>{{ $turno->tramite->nombre }}</strong></p>
-        @if ($turno->cedula)<p class="num">Cédula: <strong>{{ $turno->cedula }}</strong></p>@endif
-        <p class="suave num">Emitido el {{ $turno->created_at->format('d/m/Y · H:i') }}</p>
-        <hr>
-        @if ($turno->esFuturo())
-            <div class="alerta info" role="status" style="justify-content:center;margin:0 0 12px">
-                <div>Válido solo el<br><strong style="font-size:1.4rem">{{ \Illuminate\Support\Carbon::parse($turno->fecha)->translatedFormat('l j \d\e F') }}</strong></div>
-            </div>
-            <p class="suave">Venga ese día con su carpeta completa y espere a que su número aparezca en la pantalla.</p>
-        @elseif ($turno->fecha !== today()->toDateString())
-            <p>Este turno fue válido solo el {{ \Illuminate\Support\Carbon::parse($turno->fecha)->format('d/m/Y') }}.</p>
-        @elseif ($turno->estado === 'espera')
-            <p class="num">
-                @if ($delante === 0) <strong>Usted es el siguiente.</strong>
-                @else Tiene <strong>{{ $delante }}</strong> {{ $delante === 1 ? 'persona' : 'personas' }} delante.
-                @endif
-            </p>
-            <p class="suave">Espere a que su número aparezca en la pantalla.</p>
-        @elseif ($turno->estado === 'llamado')
-            <div class="alerta exito" role="status" style="justify-content:center;margin:0">
-                <strong>Es su turno: pase a {{ $turno->ventanilla?->nombre ?? 'la ventanilla' }}</strong>
-            </div>
-        @elseif ($turno->estado === 'atendido')
-            <p>Turno atendido. Gracias por su visita.</p>
-        @else
-            <p>Lo llamamos y no se presentó. Si aún necesita atención, saque un nuevo turno.</p>
+        @if ($diaReservado)
+            <p class="fecha-turno">Válido solo el<br><strong>{{ $diaReservado }}</strong></p>
         @endif
+        <svg class="qr" viewBox="0 0 {{ $lado }} {{ $lado }}" role="img" aria-labelledby="qr-datos" shape-rendering="crispEdges">
+            <rect width="100%" height="100%" fill="#fff"/>
+            <path d="{{ $trazo }}" fill="#000"/>
+        </svg>
+        <p class="solo-lector" id="qr-datos">Código QR con los datos del turno: {{ str_replace("\n", '. ', $turno->textoQr()) }}</p>
+        <p class="suave">Escanee el código para ver los datos del turno.</p>
+
+        <div class="no-imprimir">
+            <hr>
+            @if ($turno->esFuturo())
+                <p class="suave">Venga ese día con su carpeta completa y espere a que su número aparezca en la pantalla.</p>
+            @elseif ($turno->fecha !== today()->toDateString())
+                <p>Este turno fue válido solo el {{ \Illuminate\Support\Carbon::parse($turno->fecha)->format('d/m/Y') }}.</p>
+            @elseif ($turno->estado === 'espera')
+                <p class="num">
+                    @if ($delante === 0) <strong>Usted es el siguiente.</strong>
+                    @else Tiene <strong>{{ $delante }}</strong> {{ $delante === 1 ? 'persona' : 'personas' }} delante.
+                    @endif
+                </p>
+                <p class="suave">Espere a que su número aparezca en la pantalla.</p>
+            @elseif ($turno->estado === 'llamado')
+                <div class="alerta exito" role="status" style="justify-content:center;margin:0">
+                    <strong>Es su turno: pase a {{ $turno->ventanilla?->nombre ?? 'la ventanilla' }}</strong>
+                </div>
+            @elseif ($turno->estado === 'atendido')
+                <p>Turno atendido. Gracias por su visita.</p>
+            @else
+                <p>Lo llamamos y no se presentó. Si aún necesita atención, saque un nuevo turno.</p>
+            @endif
+        </div>
 
         <div class="acciones no-imprimir">
             @if ($turno->estado === 'espera')
@@ -56,73 +78,40 @@
 @endsection
 
 @if ($turno->estado === 'espera')
-    @php
-            $imagen = [
-                'codigo' => $turno->codigo,
-                'tramite' => $turno->tramite->nombre,
-                'cedula' => $turno->cedula,
-                'preferente' => $turno->preferente,
-                'valido' => \Illuminate\Support\Carbon::parse($turno->fecha)->translatedFormat('l j \d\e F \d\e Y'),
-                'emitido' => $turno->created_at->format('d/m/Y · H:i'),
-                'archivo' => "turno-{$turno->codigo}-{$turno->fecha}.png",
-            ];
-    @endphp
+    @php $imagen = ['codigo' => $turno->codigo, 'dia' => $diaReservado, 'qr' => $qr, 'archivo' => "turno-{$turno->codigo}-{$turno->fecha}.png"]; @endphp
     @push('scripts')
         <script>
-            // El ticket se dibuja en el propio navegador: funciona sin internet y sin librerías.
+            // La imagen se dibuja en el propio navegador, igual que el papel: número y QR.
             const t = @json($imagen);
 
             document.getElementById('descargar').addEventListener('click', () => {
-                const W = 720, P = 56, fuente = 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+                const W = 720, fuente = 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+                const modulo = Math.floor(440 / (t.qr.length + 8)), ladoQr = modulo * (t.qr.length + 8);
                 const c = document.createElement('canvas'), g = c.getContext('2d');
-
-                // [texto, tamaño, negrita, color, espacio antes]; los textos largos se parten en varias líneas.
-                const partir = (texto, px, negrita) => {
-                    g.font = `${negrita ? 700 : 400} ${px}px ${fuente}`;
-                    const lineas = [''];
-                    for (const palabra of texto.split(' ')) {
-                        const prueba = (lineas.at(-1) + ' ' + palabra).trim();
-                        if (g.measureText(prueba).width > W - 2 * P && lineas.at(-1)) lineas.push(palabra);
-                        else lineas[lineas.length - 1] = prueba;
-                    }
-                    return lineas;
-                };
-                const filas = [];
-                const agregar = (texto, px, negrita = false, color = '#0f172a', antes = 14) =>
-                    partir(texto, px, negrita).forEach((l, i) => filas.push([l, px, negrita, color, i ? 6 : antes]));
-
-                agregar('GAD Municipal · Catastros y Avalúos', 26, false, '#475569', 0);
-                agregar('Su turno', 32, true, '#0f172a', 20);
-                agregar(t.codigo, 150, true, '#0f172a', 10);
-                if (t.preferente) agregar('Atención preferente', 28, true, '#166534', 10);
-                agregar(t.tramite, 32, true, '#0f172a', 18);
-                if (t.cedula) agregar('Cédula: ' + t.cedula, 30, false, '#0f172a', 14);
-                filas.push(['—', 0, false, '', 30]); // línea punteada
-                agregar('Válido solo el', 28, false, '#475569', 30);
-                agregar(t.valido, 38, true, '#075985', 8);
-                agregar('Emitido el ' + t.emitido, 24, false, '#475569', 24);
-                agregar('Espere a que su número aparezca en la pantalla.', 24, false, '#475569', 10);
-
                 c.width = W;
-                c.height = P * 2 + filas.reduce((h, [, px, , , antes]) => h + antes + px * 1.15, 0);
+                const extra = t.dia ? 90 : 0; // espacio para la fecha en turnos de otro día
+                c.height = 340 + extra + ladoQr + 110;
+
                 g.fillStyle = '#fff';
                 g.fillRect(0, 0, W, c.height);
                 g.strokeStyle = '#cbd5e1'; g.lineWidth = 4;
                 g.strokeRect(2, 2, W - 4, c.height - 4);
                 g.textAlign = 'center'; g.textBaseline = 'top';
 
-                let y = P;
-                for (const [texto, px, negrita, color, antes] of filas) {
-                    y += antes;
-                    if (!px) {
-                        g.setLineDash([10, 8]); g.beginPath(); g.moveTo(P, y); g.lineTo(W - P, y); g.stroke(); g.setLineDash([]);
-                        continue;
-                    }
-                    g.font = `${negrita ? 700 : 400} ${px}px ${fuente}`;
-                    g.fillStyle = color;
-                    g.fillText(texto, W / 2, y);
-                    y += px * 1.15;
+                const texto = (s, px, peso, color, y) => { g.font = `${peso} ${px}px ${fuente}`; g.fillStyle = color; g.fillText(s, W / 2, y); };
+                texto('GAD Municipal · Catastros y Avalúos', 26, 400, '#475569', 56);
+                texto('Su turno', 32, 700, '#0f172a', 100);
+                texto(t.codigo, 150, 700, '#0f172a', 150);
+                if (t.dia) {
+                    texto('Válido solo el', 26, 400, '#475569', 320);
+                    texto(t.dia, 36, 700, '#075985', 354);
                 }
+
+                const x0 = (W - ladoQr) / 2 + 4 * modulo, y0 = 330 + extra + 4 * modulo;
+                g.fillStyle = '#000';
+                t.qr.forEach((fila, y) => fila.forEach((oscuro, x) => oscuro && g.fillRect(x0 + x * modulo, y0 + y * modulo, modulo, modulo)));
+
+                texto('Escanee el código para ver los datos del turno.', 24, 400, '#475569', 340 + extra + ladoQr + 30);
 
                 c.toBlob(blob => {
                     const a = document.createElement('a');

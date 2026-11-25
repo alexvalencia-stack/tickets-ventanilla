@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\UniqueConstraintViolationException;
+use BaconQrCode\Common\ErrorCorrectionLevel;
+use BaconQrCode\Encoder\Encoder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 #[Fillable(['fecha', 'codigo', 'tramite_id', 'preferente', 'estado', 'ventanilla_id', 'user_id', 'llamadas', 'llamado_at', 'finalizado_at', 'cedula', 'token'])]
@@ -34,6 +37,35 @@ class Turno extends Model
     public function esFuturo(): bool
     {
         return $this->fecha > today()->toDateString();
+    }
+
+    /** Datos del turno que van dentro del QR: el ticket impreso solo muestra el número. */
+    public function textoQr(): string
+    {
+        return implode("\n", array_filter([
+            'Catastros y Avalúos',
+            "Turno: {$this->codigo}".($this->preferente ? ' (preferente)' : ''),
+            "Trámite: {$this->tramite->nombre}",
+            $this->cedula ? "Cédula: {$this->cedula}" : null,
+            'Válido: '.Carbon::parse($this->fecha)->translatedFormat('l d/m/Y'),
+            'Emitido: '.$this->created_at->format('d/m/Y H:i'),
+        ]));
+    }
+
+    /**
+     * Módulos del QR (filas de 0 y 1). Se dibujan igual en la página (SVG) y en la imagen descargable.
+     * UTF-8 sin prefijo ECI: es lo que mejor leen las cámaras de los celulares con tildes y ñ.
+     *
+     * @return list<list<int>>
+     */
+    public function qr(): array
+    {
+        $matriz = Encoder::encode($this->textoQr(), ErrorCorrectionLevel::M(), 'UTF-8', null, false)->getMatrix();
+
+        return array_map(
+            fn (int $y) => array_map(fn (int $x) => $matriz->get($x, $y), range(0, $matriz->getWidth() - 1)),
+            range(0, $matriz->getHeight() - 1),
+        );
     }
 
     public function scopeHoy(Builder $q): void

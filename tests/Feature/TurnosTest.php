@@ -59,7 +59,13 @@ class TurnosTest extends TestCase
         $this->assertSame([today()->toDateString(), '1712345675'], [Turno::first()->fecha, Turno::first()->cedula]);
         $this->assertTrue(Turno::first()->preferente);
         $this->get('/turnos/'.Turno::first()->token)->assertOk()->assertSee('R-001')->assertSee('Usted es el siguiente')
-            ->assertSee('Cédula: <strong>1712345675</strong>', false)->assertSee('Guardar como imagen');
+            ->assertSee('<svg class="qr"', false)->assertSee('Guardar como imagen')
+            ->assertDontSee('Certificado</strong>', false)->assertDontSee('fecha-turno'); // turno de hoy: sin fecha // el ticket solo muestra el número; el resto va en el QR
+        $texto = Turno::first()->textoQr();
+        foreach (['Turno: R-001 (preferente)', 'Trámite: Certificado', 'Cédula: 1712345675', 'Válido: lunes 16/11/2026'] as $dato) {
+            $this->assertStringContainsString($dato, $texto);
+        }
+        $this->assertGreaterThanOrEqual(21, count(Turno::first()->qr())); // matriz cuadrada de un QR válido
         // El id correlativo no abre el ticket: así nadie puede recorrer las cédulas de los demás.
         $this->get('/turnos/'.Turno::first()->id)->assertNotFound();
     }
@@ -81,7 +87,7 @@ class TurnosTest extends TestCase
         $this->post('/turnos', ['tramite_id' => $this->recepcion->id, 'cedula' => '0912345675'])->assertRedirect();
         $turno = Turno::first();
         $this->assertSame([$martes, 'R-001', '0912345675'], [$turno->fecha, $turno->codigo, $turno->cedula]);
-        $this->get("/turnos/{$turno->token}")->assertOk()->assertSee('Válido solo el')->assertSee('martes 17 de noviembre');
+        $this->get("/turnos/{$turno->token}")->assertOk()->assertSee('<p class="fecha-turno">Válido solo el<br><strong>martes 17 de noviembre</strong></p>', false);
 
         // Una cédula, un turno pendiente.
         $this->from('/')->post('/turnos', ['tramite_id' => $this->recepcion->id, 'cedula' => '0912345675'])->assertSessionHasErrors('cedula');

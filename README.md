@@ -30,7 +30,8 @@ Las cuentas iniciales están en `database/seeders/DatabaseSeeder.php`. Cámbiela
   entrega el turno para el siguiente día hábil con cupo, hasta 5 días hábiles adelante. No conoce feriados.
 - Todo trámite cuyo tipo tiene cupo pide cédula (se valida el dígito verificador), sea para hoy o para otro día,
   y cada cédula puede tener un solo turno pendiente. Los tipos sin cupo (entregas, consultas) no la piden.
-- El ticket muestra la cédula y se puede imprimir o guardar como imagen (PNG) en el celular. Su enlace
+- El ticket (papel, pantalla e imagen PNG) muestra el número, la fecha si es para otro día, y un código QR con:
+  trámite, cédula, día válido y hora de emisión. Se puede imprimir o guardar como imagen. Su enlace
   usa un código secreto, no el número del turno, para que nadie pueda ver los tickets de otros.
 - Quien perdió el ticket lo recupera en `/recuperar` (enlace en el kiosco) con su cédula. Solo se recuperan
   turnos pendientes, y hay un límite de 10 intentos por minuto para que nadie pruebe cédulas al azar.
